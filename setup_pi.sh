@@ -4,14 +4,30 @@
 
 echo "Setting up SmartPark environment..."
 
-# 1. System Dependencies (Optional, user might need sudo)
-# echo "Installing system dependencies..."
-# sudo apt-get update && sudo apt-get install -y python3-venv python3-pip nodejs npm
+# 1. System Dependencies
+# Check for Node.js/npm
+if ! command -v npm &> /dev/null; then
+    echo "--------------------------------------------------------"
+    echo "CRITICAL: Node.js/npm is missing!"
+    echo "Please run the following command to install them:"
+    echo "sudo apt-get update && sudo apt-get install -y nodejs npm"
+    echo "--------------------------------------------------------"
+    # We can try to install it if the user has sudo rights without password, 
+    # but safer to ask them.
+    read -p "Attempt to install Node.js automatically? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        sudo apt-get update && sudo apt-get install -y nodejs npm
+    else
+        echo "Please install Node.js manually and re-run this script."
+        exit 1
+    fi
+fi
 
 # 2. Python Setup
 if [ ! -d "venv" ]; then
     echo "Creating Python virtual environment..."
-    python3 -m venv venv
+    python3 -m venv venv --system-site-packages
     
     echo "activating venv..."
     source venv/bin/activate
@@ -19,9 +35,11 @@ if [ ! -d "venv" ]; then
     echo "Installing backend requirements..."
     pip install -r backend/requirements.txt
     
-    # RPi.GPIO is needed on Pi, but usually pre-installed or needs specific install.
-    # It's not in requirements.txt because we developed on Mac.
-    pip install RPi.GPIO
+    # FOR RASPBERRY PI 5: RPi.GPIO does not work. We need rpi-lgpio.
+    # We remove RPi.GPIO just in case and install the replacement.
+    echo "Installing Pi 5 compatible GPIO library..."
+    pip uninstall -y RPi.GPIO
+    pip install rpi-lgpio
 else
     echo "venv already exists."
 fi

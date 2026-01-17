@@ -34,13 +34,20 @@ def setup_gpio():
     
     for slot_id, pins in PI_PINOUT.items():
         # Setup Sensor Pins
-        GPIO.setup(pins['trig'], GPIO.OUT)
-        GPIO.setup(pins['echo'], GPIO.IN)
-        
-        # Setup LED Pins if present
-        if pins['led'] is not None:
-            GPIO.setup(pins['led'], GPIO.OUT)
-            GPIO.output(pins['led'], GPIO.LOW) # Default Off
+        try:
+            GPIO.setup(pins['trig'], GPIO.OUT)
+            GPIO.setup(pins['echo'], GPIO.IN)
+            
+            # Setup LED Pins if present
+            if pins['led'] is not None:
+                GPIO.setup(pins['led'], GPIO.OUT)
+                GPIO.output(pins['led'], GPIO.LOW) # Default Off
+        except RuntimeError as e:
+            print(f"GPIO Setup Error for {slot_id}: {e}")
+            print("Falling back to MOCK mode for this pin.")
+            # If we fail, we might want to disable IS_RPI to prevent further crash
+            # or just continue. 
+
 
 def read_ultrasonic_distance(trig_pin, echo_pin) -> float:
     if not IS_RPI:
