@@ -34,11 +34,11 @@ def init_db():
 
     # Premade Users
     # user1 (normal)
-    users_db["user1"] = User(username="user1", password="password", is_disabled=False, is_elderly=False)
+    users_db["user1"] = User(id="user1", username="user1", password="password", is_disabled=False, is_elderly=False)
     # user2 (disabled)
-    users_db["user2"] = User(username="user2", password="password", is_disabled=True, is_elderly=False)
+    users_db["user2"] = User(id="user2", username="user2", password="password", is_disabled=True, is_elderly=False)
     # user3 (elderly)
-    users_db["user3"] = User(username="user3", password="password", is_disabled=False, is_elderly=True)
+    users_db["user3"] = User(id="user3", username="user3", password="password", is_disabled=False, is_elderly=True)
 
     print(f"Initialized {len(slots_db)} slots and {len(users_db)} users.")
 

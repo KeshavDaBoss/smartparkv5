@@ -1,110 +1,70 @@
-// Simplified Graph for Demo
-// We will treat the mall floor as a graph of nodes.
-// Slot Nodes, Path Nodes, Entry Nodes.
-// For A*, we need a graph dictionary: { node_id: { neighbor_id: cost, ... } }
-// And coordinates for Heuristic.
+// Graph for "Left to Right" layout
+// We assume a container width of roughly 1000px, height 400px.
+// Slots are roughly distributed along the X axis.
+// Path is a line below them.
 
-// Coordinate system: 0-100% relative to image width/height (to be responsive)
-// Slot coordinates (approximate based on typical layout)
+// To make this responsive and generic, we need to map Slot IDs to X/Y percentages or pixels.
+// Since FloorPlan renders dynamically, let's hardcode the logical graph.
 
-export const NODES = {
-    // Entries
-    'ENTRY_1': { x: 50, y: 95, connections: ['PATH_MAIN'] },
-    'ENTRY_2': { x: 50, y: 5, connections: ['PATH_TOP'] },
+// Standard Layout:
+// Entry @ Right (100% X, 50% Y)
+// Main Path running East-West @ 80% Y? Or 50% Y if slots are top/bottom?
+// User said: "Blue are the slots... left to right"
+// Let's assume slots are top row (20% Y). Path is bottom row (80% Y)?
+// Or Path is center.
 
-    // Main Paths
-    'PATH_MAIN': { x: 50, y: 80, connections: ['ENTRY_1', 'PATH_CENTER', 'ROW_1_LEFT', 'ROW_1_RIGHT'] },
-    'PATH_TOP': { x: 50, y: 20, connections: ['ENTRY_2', 'PATH_CENTER', 'ROW_2_LEFT', 'ROW_2_RIGHT'] },
-    'PATH_CENTER': { x: 50, y: 50, connections: ['PATH_MAIN', 'PATH_TOP'] },
+const NODES_GRAPH = {
+    'ENTRY': { x: 950, y: 200, adj: ['PATH_MAIN'] }, // Right side entry
+    'PATH_MAIN': { x: 500, y: 200, adj: ['ENTRY', 'S1_NODE', 'S2_NODE', 'S3_NODE', 'S4_NODE'] },
 
-    // Branch Paths to Slots
-    'ROW_1_LEFT': { x: 20, y: 80, connections: ['PATH_MAIN', 'M1-L1-S1', 'M1-L1-S2'] },
-    'ROW_1_RIGHT': { x: 80, y: 80, connections: ['PATH_MAIN', 'M1-L1-S3', 'M1-L1-S4'] },
-    'ROW_2_LEFT': { x: 20, y: 20, connections: ['PATH_TOP', 'M1-L2-S5', 'M1-L2-S6'] },
-    'ROW_2_RIGHT': { x: 80, y: 20, connections: ['PATH_TOP', 'M1-L2-S7', 'M1-L2-S8'] },
-
-    // Slot Nodes (Destination) - Mapped to Slot IDs
-    'M1-L1-S1': { x: 10, y: 80, connections: ['ROW_1_LEFT'] },
-    'M1-L1-S2': { x: 30, y: 80, connections: ['ROW_1_LEFT'] },
-    'M1-L1-S3': { x: 70, y: 80, connections: ['ROW_1_RIGHT'] },
-    'M1-L1-S4': { x: 90, y: 80, connections: ['ROW_1_RIGHT'] },
-
-    'M1-L2-S5': { x: 10, y: 20, connections: ['ROW_2_LEFT'] },
-    'M1-L2-S6': { x: 30, y: 20, connections: ['ROW_2_LEFT'] },
-    'M1-L2-S7': { x: 70, y: 20, connections: ['ROW_2_RIGHT'] },
-    'M1-L2-S8': { x: 90, y: 20, connections: ['ROW_2_RIGHT'] },
-
-    // Mall 2 Mappings (Reusing same layout for demo simplicity, just re-mapping IDs if needed or assume same physical layout)
-    'M2-L1-S1': { x: 10, y: 80, connections: ['ROW_1_LEFT'] },
-    'M2-L1-S2': { x: 30, y: 80, connections: ['ROW_1_LEFT'] },
-    'M2-L1-S3': { x: 70, y: 80, connections: ['ROW_1_RIGHT'] },
-    'M2-L1-S4': { x: 90, y: 80, connections: ['ROW_1_RIGHT'] },
+    // Slot Approach Nodes (Points on the path below the slots)
+    // Assuming 4 slots distributed: 20%, 40%, 60%, 80% width
+    'S1_NODE': { x: 200, y: 200, adj: ['PATH_MAIN'] },
+    'S2_NODE': { x: 400, y: 200, adj: ['PATH_MAIN'] },
+    'S3_NODE': { x: 600, y: 200, adj: ['PATH_MAIN'] },
+    'S4_NODE': { x: 800, y: 200, adj: ['PATH_MAIN'] },
 };
 
-function heuristic(a, b) {
-    // Manhattan distance or Euclidean
-    const nodeA = NODES[a];
-    const nodeB = NODES[b];
-    return Math.sqrt(Math.pow(nodeA.x - nodeB.x, 2) + Math.pow(nodeA.y - nodeB.y, 2));
-}
+// Map real Slot IDs to abstract graph nodes
+const SLOT_MAP = {
+    // Mall 1 Level 1
+    'M1-L1-S1': { x: 200, y: 100, entry: 'S1_NODE' },
+    'M1-L1-S2': { x: 400, y: 100, entry: 'S2_NODE' },
+    'M1-L1-S3': { x: 600, y: 100, entry: 'S3_NODE' },
+    'M1-L1-S4': { x: 800, y: 100, entry: 'S4_NODE' },
 
-export function findPath(startNodeId, endNodeId) {
-    // A* Implementation
+    // Mall 1 Level 2 (5-8)
+    'M1-L2-S5': { x: 200, y: 100, entry: 'S1_NODE' },
+    'M1-L2-S6': { x: 400, y: 100, entry: 'S2_NODE' },
+    'M1-L2-S7': { x: 600, y: 100, entry: 'S3_NODE' },
+    'M1-L2-S8': { x: 800, y: 100, entry: 'S4_NODE' },
 
-    // If nodes don't exist in our weak graph definition, try to map or fail
-    if (!NODES[startNodeId]) startNodeId = 'ENTRY_1'; // Default
-    if (!NODES[endNodeId]) return null;
+    // Mall 2 Level 1 (1-4)
+    'M2-L1-S1': { x: 200, y: 100, entry: 'S1_NODE' },
+    'M2-L1-S2': { x: 400, y: 100, entry: 'S2_NODE' },
+    'M2-L1-S3': { x: 600, y: 100, entry: 'S3_NODE' },
+    'M2-L1-S4': { x: 800, y: 100, entry: 'S4_NODE' },
+};
 
-    let openSet = [startNodeId];
-    let cameFrom = {};
-    let gScore = {}; // Cost from start
-    let fScore = {}; // Estimated cost to end
+export const NODES = {}; // Placeholder if needed
 
-    Object.keys(NODES).forEach(n => {
-        gScore[n] = Infinity;
-        fScore[n] = Infinity;
-    });
+export function findPath(startId, endSlotId) {
+    // Simplified "Path" for display:
+    // Entry -> Main Path -> Slot Node -> Slot
 
-    gScore[startNodeId] = 0;
-    fScore[startNodeId] = heuristic(startNodeId, endNodeId);
+    const target = SLOT_MAP[endSlotId];
+    if (!target) return [];
 
-    while (openSet.length > 0) {
-        // Get node with lowest fScore
-        let current = openSet.reduce((a, b) => fScore[a] < fScore[b] ? a : b);
+    // Construct simple line segment path
+    // 1. Start at Entry
+    const p1 = NODES_GRAPH['ENTRY'];
 
-        if (current === endNodeId) {
-            return reconstructPath(cameFrom, current);
-        }
+    // 2. Go to specific approach node
+    const approachNode = NODES_GRAPH[target.entry];
 
-        openSet = openSet.filter(n => n !== current);
+    // 3. Go to Slot
+    const p3 = { x: target.x, y: target.y };
 
-        // Neighbors
-        let neighbors = NODES[current].connections || [];
-        for (let neighbor of neighbors) {
-            // Distance between current and neighbor (can assume 1 or actual distance)
-            let d = heuristic(current, neighbor);
-            let tentative_gScore = gScore[current] + d;
-
-            if (tentative_gScore < gScore[neighbor]) {
-                cameFrom[neighbor] = current;
-                gScore[neighbor] = tentative_gScore;
-                fScore[neighbor] = gScore[neighbor] + heuristic(neighbor, endNodeId);
-
-                if (!openSet.includes(neighbor)) {
-                    openSet.push(neighbor);
-                }
-            }
-        }
-    }
-    return null; // No path
-}
-
-function reconstructPath(cameFrom, current) {
-    let totalPath = [current];
-    while (current in cameFrom) {
-        current = cameFrom[current];
-        totalPath.unshift(current);
-    }
-    // Return array of coordinates
-    return totalPath.map(nodeId => NODES[nodeId]);
+    // Return array of points for SVG
+    return [p1, approachNode, p3];
 }

@@ -215,6 +215,7 @@ def cancel_booking(payload: dict = Body(...)):
 
 @app.post("/sensor/esp32")
 def receive_esp32_data(data: SensorData):
+    print(f"Received ESP32 Data: {data.distances}")
     # Expecting 4 distances for Mall 2 (Level 1)
     # M2-L1-S1, S2, S3, S4
     
