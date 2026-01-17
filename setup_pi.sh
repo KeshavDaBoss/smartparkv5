@@ -48,11 +48,8 @@ fi
 if [ -d "frontend" ]; then
     echo "Installing frontend dependencies..."
     cd frontend
-    if [ ! -d "node_modules" ]; then
-        npm install
-    else
-        echo "node_modules exists."
-    fi
+    # Always run install to ensure all deps in package.json are installed
+    npm install
     cd ..
 else
     echo "Error: frontend directory not found!"
