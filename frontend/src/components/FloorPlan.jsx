@@ -34,20 +34,42 @@ export default function FloorPlan({ mallId, level, slots, refreshSlots, onNaviga
             return;
         }
 
-        const availableSlots = currentSlots.filter(s => {
+        // Helper to check if a slot is truly available for the current user
+        const isSlotAvailable = (s) => {
             if (s.status !== 'free') return false;
             if (s.is_reserved_disabled && !user.is_disabled) return false;
             if (s.is_reserved_elderly && !user.is_elderly) return false;
             return true;
-        });
+        };
 
-        if (availableSlots.length > 0) {
-            availableSlots.sort((a, b) => a.slot_number - b.slot_number);
-            const targetSlot = availableSlots[0];
+        const availableSlotsOnLevel = currentSlots.filter(isSlotAvailable);
+
+        if (availableSlotsOnLevel.length > 0) {
+            availableSlotsOnLevel.sort((a, b) => a.slot_number - b.slot_number);
+            const targetSlot = availableSlotsOnLevel[0];
             const p = findPath('ENTRY', targetSlot.id);
             setPath(p);
         } else {
-            alert("No available slots found.");
+            // Check if there are slots on OTHER levels in the same mall
+            const allMallSlots = slots.filter(s => s.mall_id === mallId);
+            const availableAnywhere = allMallSlots.filter(isSlotAvailable);
+
+            if (availableAnywhere.length > 0) {
+                // Determine which level has space
+                const otherLevelSlots = availableAnywhere.filter(s => s.level_id !== parseInt(level));
+                if (otherLevelSlots.length > 0) {
+                    const targetLevel = otherLevelSlots[0].level_id;
+                    alert(`No slots available on this level. Please go to Level ${targetLevel}.`);
+                } else {
+                    // Should imply slots are available but somehow not on other levels? 
+                    // This branch implies availableAnywhere > 0 but !otherLevelSlots... 
+                    // meaning they must be on THIS level, but we failed check above? 
+                    // Should be impossible safely.
+                    alert("No slots available.");
+                }
+            } else {
+                alert("No slots available in the entire mall.");
+            }
         }
     };
 
