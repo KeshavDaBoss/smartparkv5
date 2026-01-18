@@ -45,7 +45,7 @@ export default function LoginPage() {
 
     return (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column' }}>
-            <h1 style={{ marginBottom: '2rem', color: 'var(--primary)' }}>SmartPark</h1>
+            <img src="/smartparklogo-clear.png" alt="SmartPark" style={{ maxWidth: '90%', height: 'auto', marginBottom: '2rem' }} />
             <div className="card" ref={formRef} style={{ width: '350px' }}>
                 <h2 style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
                     {isLogin ? 'Login' : 'Sign Up'}

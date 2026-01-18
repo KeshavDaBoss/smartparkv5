@@ -19,7 +19,7 @@ export default function Dashboard() {
         <div style={{ padding: '2rem' }}>
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem' }}>
-                <h1>Find Parking</h1>
+                <img src="/smartparklogo-clear.png" alt="SmartPark" style={{ height: '150px' }} />
                 <div style={{ position: 'relative' }}>
                     <div
                         onClick={() => setShowMenu(!showMenu)}

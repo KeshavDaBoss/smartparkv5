@@ -9,11 +9,11 @@ export const AuthProvider = ({ children }) => {
     // Check local storage for persisted login (simplified)
     const storedUser = localStorage.getItem('smartpark_user');
     if (storedUser) {
-        try {
-            setUser(JSON.parse(storedUser));
-        } catch (e) {
-            console.error("Failed to parse user", e);
-        }
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (e) {
+        console.error("Failed to parse user", e);
+      }
     }
   }, []);
 

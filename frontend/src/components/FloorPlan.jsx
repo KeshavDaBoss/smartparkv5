@@ -1,320 +1,374 @@
 import React, { useRef, useEffect, useState } from 'react';
-import gsap from 'gsap';
 import { bookSlot } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
-import { findPath, NODES } from '../utils/astar';
+import { findPath } from '../utils/astar';
 
 export default function FloorPlan({ mallId, level, slots, refreshSlots, onNavigate }) {
     const { user } = useAuth();
-    const [selectedSlot, setSelectedSlot] = useState(null);
-    const [bookingDate, setBookingDate] = useState('today');
     const [path, setPath] = useState(null);
-    const modalRef = useRef(null);
+    const [bookingDate, setBookingDate] = useState('today');
 
-    // Filter slots for this view
+    // Modal state
+    const [showModal, setShowModal] = useState(false);
+    const [selectedSlotForBooking, setSelectedSlotForBooking] = useState(null);
+
     const currentSlots = slots.filter(s => s.mall_id === mallId && s.level_id === parseInt(level));
-
-    // Sort slots by number to ensure correct order in grid
     currentSlots.sort((a, b) => a.slot_number - b.slot_number);
+
+    // Reset path when level changes
+    useEffect(() => {
+        setPath(null);
+    }, [level, mallId]);
 
     useEffect(() => {
         if (onNavigate) {
-            // Find closest available slot matching user needs
-            let targetSlot = null;
-
-            // Prioritize specialized slots if user has traits
-            if (user.is_disabled) {
-                targetSlot = currentSlots.find(s => s.is_reserved_disabled && s.status === 'free');
-            }
-            if (!targetSlot && user.is_elderly) {
-                targetSlot = currentSlots.find(s => s.is_reserved_elderly && s.status === 'free');
-            }
-            // Fallback to normal slots
-            if (!targetSlot) {
-                targetSlot = currentSlots.find(s => !s.is_reserved_disabled && !s.is_reserved_elderly && s.status === 'free');
-            }
-
-            if (targetSlot) {
-                const startNodeId = 'ENTRY'; // We'll map this in astar
-                const endNodeId = targetSlot.id;
-                const p = findPath(startNodeId, endNodeId);
-                setPath(p);
-            } else {
-                alert("No suitable slots available.");
-            }
+            handleAutoNavigation();
         }
-    }, [onNavigate, currentSlots, user]);
+    }, [onNavigate]);
 
-    const handleSlotClick = (slot) => {
-        if (slot.is_my_booking) {
-            if (window.confirm("Navigate to your slot?")) {
-                const p = findPath('ENTRY', slot.id);
-                setPath(p);
-            }
+    const handleAutoNavigation = () => {
+        const myBooking = currentSlots.find(s => s.is_my_booking);
+        if (myBooking) {
+            const p = findPath('ENTRY', myBooking.id);
+            setPath(p);
             return;
         }
 
-        // Booking Constraints
-        if (slot.status !== 'free') return; // Can't book occupied/booked
+        const availableSlots = currentSlots.filter(s => {
+            if (s.status !== 'free') return false;
+            if (s.is_reserved_disabled && !user.is_disabled) return false;
+            if (s.is_reserved_elderly && !user.is_elderly) return false;
+            return true;
+        });
 
-        // Mall 1 Restrictions
-        // L1: S1, S2 Bookable. S3(Disabled), S4(Elderly).
-        // L2: None bookable? User said: "Only 4 slots bookable (2 in Mall 2, 2 in Mall 1)"
-        // "Mall 1: Level 1- slot 1 (bookable), Slot 2 (Bookable)..."
-        // "level 2- Slot 5, 6, 7, 8 (normal)" -> implied NOT bookable?
-        // Let's enforce: If it's normal and NOT S1/S2/M2-S1/M2-S2, maybe not bookable?
-        // But user constraint: "Only 4 slots bookable".
-
-        const isBookable = (slot.mall_id === 'mall1' && slot.level_id === 1 && (slot.slot_number === 1 || slot.slot_number === 2)) ||
-            (slot.mall_id === 'mall2' && slot.level_id === 1 && (slot.slot_number === 1 || slot.slot_number === 2)) ||
-            slot.is_reserved_disabled || slot.is_reserved_elderly; // Special slots usually bookable?
-
-        // Wait, "Only 4 slots bookable". That refers to the general public ones maybe?
-        // "Slot 3(Disabled), Slot 4 (elderly)"... "People will be able to make bookings as well... options like 'Are you above 60?' for specially reserved slots"
-        // So Disabled/Elderly ARE bookable.
-
-        // Revised Logic:
-        // Bookable IF:
-        // 1. Is S1 or S2 (General)
-        // 2. Is Disabled AND User is Disabled
-        // 3. Is Elderly AND User is Elderly
-
-        let canBook = false;
-        if (slot.slot_number === 1 || slot.slot_number === 2) canBook = true;
-        if (slot.is_reserved_disabled && user.is_disabled) canBook = true;
-        if (slot.is_reserved_elderly && user.is_elderly) canBook = true;
-
-        // Prevent normal users booking special slots
-        if (slot.is_reserved_disabled && !user.is_disabled) {
-            alert("Reserved for Disabled Users");
-            return;
-        }
-        if (slot.is_reserved_elderly && !user.is_elderly) {
-            alert("Reserved for Elderly Users");
-            return;
-        }
-
-        if (canBook) {
-            setSelectedSlot(slot);
-            if (modalRef.current) gsap.fromTo(modalRef.current, { scale: 0.8, opacity: 0 }, { scale: 1, opacity: 1 });
+        if (availableSlots.length > 0) {
+            availableSlots.sort((a, b) => a.slot_number - b.slot_number);
+            const targetSlot = availableSlots[0];
+            const p = findPath('ENTRY', targetSlot.id);
+            setPath(p);
         } else {
-            alert("This slot is not bookable online (FCFS only)");
+            alert("No available slots found.");
         }
+    };
+
+    const handleBookClick = (slot) => {
+        setSelectedSlotForBooking(slot);
+        setShowModal(true);
+    };
+
+    const handleNavigateClick = (slot) => {
+        const p = findPath('ENTRY', slot.id);
+        setPath(p);
+    };
+
+    const getFormattedDate = (isTomorrow) => {
+        const d = new Date();
+        if (isTomorrow) d.setDate(d.getDate() + 1);
+        const dd = String(d.getDate()).padStart(2, '0');
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        return `${dd}/${mm}/${yyyy}`;
     };
 
     const confirmBooking = async () => {
         try {
-            // Date Logic
             const dateObj = new Date();
-            if (bookingDate === 'tomorrow') {
-                dateObj.setDate(dateObj.getDate() + 1);
-            }
-            const dateStr = formatDate(dateObj); // DDMMYYYY
+            if (bookingDate === 'tomorrow') dateObj.setDate(dateObj.getDate() + 1);
 
-            await bookSlot(selectedSlot.id, user.user_id, dateStr);
+            const dd = String(dateObj.getDate()).padStart(2, '0');
+            const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const yyyy = dateObj.getFullYear();
+            const dateStr = `${dd}${mm}${yyyy}`;
+
+            await bookSlot(selectedSlotForBooking.id, user.user_id, dateStr);
             alert("Booking Successful!");
-            setSelectedSlot(null);
+            setShowModal(false);
             refreshSlots();
         } catch (e) {
             alert(e.message);
         }
     };
 
-    const formatDate = (d) => {
-        let dd = d.getDate();
-        let mm = d.getMonth() + 1;
-        let yyyy = d.getFullYear();
-        if (dd < 10) dd = '0' + dd;
-        if (mm < 10) mm = '0' + mm;
-        return '' + dd + mm + yyyy;
+    const canShowBookButton = (slot) => {
+        if (slot.is_reserved_disabled || slot.is_reserved_elderly) return false;
+        if (slot.slot_number === 1 || slot.slot_number === 2) return true;
+        return false;
     };
 
-    // Styling
-    const getSlotStyle = (slot) => {
-        // Base Style
-        let style = {
-            width: '80px', height: '120px',
-            border: '2px solid transparent',
-            borderRadius: '8px',
-            display: 'flex', flexDirection: 'column',
-            justifyContent: 'center', alignItems: 'center',
-            cursor: 'pointer',
-            fontWeight: 'bold',
-            color: '#000',
-            position: 'relative',
-            transition: 'all 0.3s'
-        };
+    const canShowNavigateButton = (slot) => {
+        if (slot.status === 'occupied') return false;
+        if (slot.is_my_booking) return true;
+        if (slot.status === 'booked' && !slot.is_my_booking) return false;
+        if (slot.is_reserved_disabled && !user.is_disabled) return false;
+        if (slot.is_reserved_elderly && !user.is_elderly) return false;
+        return true;
+    };
 
-        // Colors
-        if (slot.is_my_booking) {
-            style.backgroundColor = 'var(--slot-my-booking)'; // Purple
-            style.color = '#FFF';
+    const generatePathString = (points) => {
+        if (!points || points.length < 2) return "";
+        let path = `M ${points[0].x} ${points[0].y}`;
+        for (let i = 1; i < points.length; i++) {
+            path += ` L ${points[i].x} ${points[i].y}`;
+        }
+        return path;
+    };
+
+    // Helper to render a slot
+    const renderSlot = (slot) => {
+        const showBook = canShowBookButton(slot);
+        const showNav = canShowNavigateButton(slot);
+
+        let Icon = null;
+        if (slot.is_reserved_disabled) Icon = <img src="/accessible_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.png" style={{ width: '50px' }} />;
+        else if (slot.is_reserved_elderly) Icon = <img src="/elderly_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.png" style={{ width: '50px' }} />;
+
+        let statusColor = 'var(--slot-free)';
+        let borderColor = 'transparent';
+
+        if (slot.status === 'free') {
+            if (slot.is_reserved_disabled) statusColor = '#f57c00';
+            else if (slot.is_reserved_elderly) statusColor = '#fbc02d';
+            else statusColor = '#2e7d32';
+        } else if (slot.status === 'occupied') {
+            statusColor = '#1a1a1a';
+            borderColor = '#d32f2f'; // Red Border
         } else if (slot.status === 'booked') {
-            style.backgroundColor = 'var(--slot-booked)'; // Blue
-            style.color = '#FFF';
-        } else if (slot.is_reserved_disabled) {
-            style.backgroundColor = 'orange'; // Orange
-        } else if (slot.is_reserved_elderly) {
-            style.backgroundColor = 'yellow'; // Yellow
-            style.color = '#000';
-        } else {
-            // Normal slots?
-            // "Blue are the slots... Green is available"
-            // Wait, the USER said: "slots in the floor design are Green for available, Red for Occupied, and Blue for Booked."
-            // AND "Slot should be Orange if disabled... Yellow for elderly"
-            // AND "blue are the slots" in the NEW description.
-
-            // Reconciliation:
-            // AVAILABLE (Free) = Green
-            // OCCUPIED (Physically) = Red (or Red outline)
-            // BOOKED = Blue
-
-            // BUT for Disabled: Orange (Base), Green if Avail?
-            // "Slot should be Orange if the slot is for disabled... green if available"
-            // This is contradictory. "Orange if disabled... green if available".
-            // Maybe Orange Border? Or Orange Icon?
-            // Let's try:
-            // Default Free = Green.
-            // Disabled Free = Orange.
-            // Elderly Free = Yellow.
-            // ANY Occupied = Red Outline + Base Color? Or just Red?
-            // "Red outline if occupied, green if available" (for disabled/orange slot).
-
-            if (slot.status === 'free') {
-                style.backgroundColor = 'var(--slot-free)'; // Green
-            } else if (slot.status === 'occupied') {
-                // Red Outline?
-                style.border = '4px solid red';
-                style.backgroundColor = '#444'; // Dark background to show outline?
-                // Or just Red background? 
-                // "Red for Occupied" was the original.
-                // "red outline if occupied" is for special slots.
-                style.backgroundColor = 'var(--slot-free)';
-            }
+            statusColor = '#1565c0';
         }
 
-        // Special Coloring overrides based on user request "blue are the slots"
-        // I will stick to status based colors because "Blue are slots" might mean the physical paint.
-        // Status colors are more important for UI.
-
-        // Disabled/Elderly specific override
-        if (slot.is_reserved_disabled) {
-            if (slot.status === 'free') style.backgroundColor = 'orange';
-            if (slot.status === 'occupied') {
-                style.backgroundColor = 'orange';
-                style.border = '5px solid red';
-            }
-        } else if (slot.is_reserved_elderly) {
-            if (slot.status === 'free') style.backgroundColor = 'yellow';
-            if (slot.status === 'occupied') {
-                style.backgroundColor = 'yellow';
-                style.border = '5px solid red';
-            }
-        } else {
-            // Normal
-            if (slot.status === 'free') style.backgroundColor = 'var(--slot-free)'; // Green
-            if (slot.status === 'occupied') {
-                style.backgroundColor = '#222';
-                style.border = '5px solid red'; // Consistent style
-            }
+        if (slot.is_my_booking) {
+            statusColor = '#5e35b1';
         }
 
-        // Selected?
-        if (selectedSlot && selectedSlot.id === slot.id) {
-            style.transform = 'scale(1.1)';
-            style.boxShadow = '0 0 15px white';
-        }
+        return (
+            <div key={slot.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{
+                    width: '200px', height: '160px',
+                    backgroundColor: '#222',
+                    position: 'relative',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center'
+                }}>
+                    <div style={{
+                        width: '85%', height: '100%',
+                        borderLeft: `2px solid #555`,
+                        borderRight: `2px solid #555`,
+                        borderTop: `2px solid #555`,
+                        position: 'relative',
+                        display: 'flex', justifyContent: 'center', alignItems: 'center',
+                        background: '#222'
+                    }}>
+                        <div style={{
+                            width: '90%', height: '90%',
+                            backgroundColor: statusColor,
+                            border: `4px solid ${borderColor}`,
+                            borderRadius: '6px',
+                            opacity: slot.status === 'occupied' ? 1 : 0.9,
+                            display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
+                            boxShadow: slot.is_my_booking ? '0 0 20px #5e35b1' : 'inset 0 0 10px rgba(0,0,0,0.5)'
+                        }}>
+                            {Icon}
+                            {!Icon && <span style={{ fontSize: '3rem', fontWeight: '800', color: 'rgba(255,255,255,0.9)' }}>{slot.slot_number}</span>}
+                        </div>
+                    </div>
 
-        return style;
+                    <div style={{
+                        position: 'absolute', bottom: '-50px',
+                        display: 'flex', gap: '8px', zIndex: 10
+                    }}>
+                        {showBook && (
+                            <button onClick={() => handleBookClick(slot)} style={{
+                                background: '#000', border: '1px solid #444',
+                                fontSize: '0.8rem', padding: '6px 12px', fontWeight: 'bold'
+                            }}>
+                                BOOK
+                            </button>
+                        )}
+                        {showNav && (
+                            <button onClick={() => handleNavigateClick(slot)} style={{
+                                background: '#000', border: '1px solid #444',
+                                fontSize: '0.8rem', padding: '6px 12px', fontWeight: 'bold'
+                            }}>
+                                NAVIGATE
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
     };
+
+    const isBookedToday = selectedSlotForBooking?.status === 'booked';
 
     return (
-        <div style={{ width: '100%', maxWidth: '1000px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        <div style={{ width: '100%', maxWidth: '1200px', margin: '0 auto' }}>
+            {path && (
+                <div style={{ textAlign: 'right', marginBottom: '10px' }}>
+                    <button
+                        onClick={() => setPath(null)}
+                        style={{ background: '#ff4d4d', fontSize: '0.9rem', padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                    >
+                        ✖ Stop Navigating
+                    </button>
+                </div>
+            )}
 
-            {/* The "Floor" Container */}
             <div style={{
                 background: '#1a1a1a',
-                padding: '2rem',
-                borderRadius: '15px',
+                borderRadius: '20px',
                 position: 'relative',
-                minHeight: '400px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between'
+                minHeight: '500px',
+                boxShadow: '0 0 20px rgba(0,0,0,0.5)',
+                display: 'flex', flexDirection: 'column', overflow: 'hidden'
             }}>
-                {/* Visual Entry Point */}
-                <div style={{ position: 'absolute', right: '-20px', top: '50%', transform: 'translateY(-50%)', background: '#333', padding: '10px', borderRadius: '8px', writingMode: 'vertical-rl' }}>
+                {/* Visual Road - Bigger */}
+                <div style={{
+                    position: 'absolute', bottom: '40px', left: 0, width: '100%',
+                    height: '120px',
+                    background: '#2c2c2c',
+                    borderTop: '6px dashed #555', // Thicker dash
+                    borderBottom: '6px dashed #555',
+                    zIndex: 0
+                }}></div>
+
+                {/* Entry Label - Aligned exact height */}
+                <div style={{
+                    position: 'absolute', left: 0, bottom: '33px', // Shifted down to center larger height
+                    height: '146px', // Increased to safely cover road + borders + slight overlap
+                    background: '#4caf50', color: '#000',
+                    width: '60px',
+                    display: 'flex', justifyContent: 'center', alignItems: 'center',
+                    borderRadius: '0 12px 12px 0',
+                    fontWeight: '900', zIndex: 5,
+                    boxShadow: '4px 0 10px rgba(0,0,0,0.5)',
+                    writingMode: 'vertical-rl',
+                    letterSpacing: '5px',
+                    transform: 'rotate(180deg)'
+                }}>
                     ENTRY
                 </div>
 
-                {/* Slots Row (Top - if we had two rows facing each other, but here we have 4 slots left-to-right) */}
-                {/* The user description: "left to right". */}
-                {/* For Mall 1 Level 2 (8 slots), maybe 2 rows? */}
-                {/* M1-L2-S5..8. Wait, user said M1-L2 has S5,6,7,8. */}
-                {/* Let's render them in a flex Grid */}
+                {/* Slots Row with Vertical Road Gap */}
+                <div style={{
+                    display: 'flex', justifyContent: 'center', gap: '10px',
+                    marginBottom: '20px', marginTop: '40px',
+                    zIndex: 1, position: 'relative',
+                    padding: '0 40px'
+                }}>
+                    {/* Slot 1 */}
+                    {currentSlots[0] && renderSlot(currentSlots[0])}
 
-                <div style={{ display: 'flex', justifyContent: 'space-evenly', alignItems: 'center' }}>
-                    {currentSlots.map((slot, i) => (
-                        <div key={slot.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                            <div
-                                onClick={() => handleSlotClick(slot)}
-                                style={getSlotStyle(slot)}
-                            >
-                                <span style={{ fontSize: '1.2rem' }}>{slot.slot_number}</span>
-                                {slot.is_reserved_disabled && <span style={{ fontSize: '2rem' }}>♿</span>}
-                                {slot.is_reserved_elderly && <span style={{ fontSize: '2rem' }}>👴</span>}
-                            </div>
+                    {/* Slot 2 */}
+                    {currentSlots[1] && renderSlot(currentSlots[1])}
+
+                    {/* The Vertical Road Gap */}
+                    <div style={{
+                        width: '120px', // Road width
+                        height: '160px', // Matches slot height
+                        display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+                        position: 'relative'
+                    }}>
+                        {/* Connecting Road Paint - Vertical Part */}
+                        <div style={{
+                            width: '80px', height: '100%', margin: '0 20px', // Fixed absolute pixels for alignment
+                            background: '#2c2c2c',
+                            borderLeft: '6px dashed #555',
+                            borderRight: '6px dashed #555',
+                            borderBottom: 'none',
+                            zIndex: 1
+                        }}>
                         </div>
-                    ))}
+
+                        {/* Connector Patch to Main Road */}
+                        <div style={{
+                            position: 'absolute',
+                            bottom: '-150px',
+                            left: '20px', // Matches the 20px margin above
+                            width: '80px', // Matches 80px width above
+                            height: '150px',
+                            background: '#2c2c2c',
+                            borderLeft: '6px dashed #555',
+                            borderRight: '6px dashed #555',
+                            zIndex: 1
+                        }}></div>
+
+                        {/* Hider Patch for Main Road Top Border */}
+                        <div style={{
+                            position: 'absolute',
+                            bottom: '-138px',
+                            left: '26px', // 20px (offset) + 6px (border) = 26px
+                            width: '68px', // 80px (width) - 12px (borders) = 68px
+                            height: '20px',
+                            background: '#2c2c2c',
+                            zIndex: 2
+                        }}></div>
+                    </div>
+
+                    {/* Slot 3 */}
+                    {currentSlots[2] && renderSlot(currentSlots[2])}
+
+                    {/* Slot 4 */}
+                    {currentSlots[3] && renderSlot(currentSlots[3])}
+
                 </div>
 
-                {/* Walkway / Path Area */}
-                {/* We use SVG overlay for the path */}
-                <svg style={{
-                    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 10
-                }}>
-                    {path && path.length > 0 && (
-                        <polyline
-                            points={path.map(p => `${p.x},${p.y}`).join(' ')}
+                {/* Path SVG Layer */}
+                <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2 }}>
+                    {path && (
+                        <path
+                            d={generatePathString(path)}
                             fill="none"
-                            stroke="white"
-                            strokeWidth="5"
-                            strokeDasharray="10,5"
+                            stroke="#4caf50"
+                            strokeWidth="8"
+                            strokeDasharray="15,10"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            style={{ filter: 'drop-shadow(0 0 5px #000)' }}
                         >
-                            <animate attributeName="stroke-dashoffset" from="100" to="0" dur="1s" repeatCount="indefinite" />
-                        </polyline>
+                            <animate attributeName="stroke-dashoffset" from="50" to="0" dur="1s" repeatCount="indefinite" />
+                        </path>
                     )}
                 </svg>
-
             </div>
 
-            {/* Booking Modal */}
-            {selectedSlot && (
+            {/* Modal */}
+            {showModal && (
                 <div style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                    background: 'rgba(0,0,0,0.8)', zIndex: 100,
+                    background: 'rgba(0,0,0,0.9)', zIndex: 200,
                     display: 'flex', justifyContent: 'center', alignItems: 'center'
                 }}>
-                    <div ref={modalRef} className="card" style={{ width: '300px', background: '#333' }}>
-                        <h3>Book Slot {selectedSlot.slot_number}</h3>
-                        <p style={{ marginBottom: '1rem', color: '#ccc' }}>Select Date:</p>
-                        <div style={{ display: 'flex', gap: '10px', marginBottom: '1.5rem' }}>
+                    <div className="card" style={{ width: '400px', background: '#1e1e1e', border: '1px solid #333' }}>
+                        <h3 style={{ textAlign: 'center', marginBottom: '1.5rem' }}>Confirm Booking</h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
                             <button
-                                style={{ background: bookingDate === 'today' ? 'var(--primary)' : '#555', flex: 1 }}
+                                disabled={isBookedToday}
                                 onClick={() => setBookingDate('today')}
+                                style={{
+                                    background: bookingDate === 'today' ? 'var(--primary)' : '#2a2a2a',
+                                    opacity: isBookedToday ? 0.4 : 1,
+                                    cursor: isBookedToday ? 'not-allowed' : 'pointer',
+                                    border: bookingDate === 'today' ? '2px solid var(--accent)' : '2px solid transparent',
+                                    display: 'flex', justifyContent: 'space-between', padding: '15px'
+                                }}
                             >
-                                Today
+                                <span style={{ fontWeight: 'bold' }}>Today</span>
+                                <span>{getFormattedDate(false)}</span>
                             </button>
                             <button
-                                style={{ background: bookingDate === 'tomorrow' ? 'var(--primary)' : '#555', flex: 1 }}
                                 onClick={() => setBookingDate('tomorrow')}
+                                style={{
+                                    background: bookingDate === 'tomorrow' ? 'var(--primary)' : '#2a2a2a',
+                                    border: bookingDate === 'tomorrow' ? '2px solid var(--accent)' : '2px solid transparent',
+                                    display: 'flex', justifyContent: 'space-between', padding: '15px'
+                                }}
                             >
-                                Tomorrow
+                                <span style={{ fontWeight: 'bold' }}>Tomorrow</span>
+                                <span>{getFormattedDate(true)}</span>
                             </button>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                            <button style={{ background: 'transparent', color: '#888' }} onClick={() => setSelectedSlot(null)}>Cancel</button>
-                            <button onClick={confirmBooking}>Confirm</button>
+                        <div style={{ display: 'flex', gap: '15px' }}>
+                            <button onClick={confirmBooking} style={{ flex: 1, background: '#2e7d32', padding: '12px' }}>CONFIRM</button>
+                            <button onClick={() => setShowModal(false)} style={{ flex: 1, background: '#c62828', padding: '12px' }}>CANCEL</button>
                         </div>
                     </div>
                 </div>
@@ -322,5 +376,3 @@ export default function FloorPlan({ mallId, level, slots, refreshSlots, onNaviga
         </div>
     );
 }
-
-// A Little helper component for legends if needed

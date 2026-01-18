@@ -1,66 +1,71 @@
 :root {
-  --primary: #4b0082; /* Dark Purple */
-  --secondary: #006400; /* Dark Green */
-  --accent: #8a2be2; /* BlueViolet */
-  --text: #e0e0e0;
-  --bg: #121212;
-  --bg-card: #1e1e1e;
-  --error: #ff4d4d;
-  --success: #00fa9a;
-  
-  --slot-free: #00fa9a; /* Green */
-  --slot-occupied: #ff4d4d; /* Red */
-  --slot-booked: #1e90ff; /* Blue */
-  --slot-my-booking: #9400d3; /* Purple */
-  
-  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+    --primary: #5c2d91;
+    /* Dull Purple */
+    --secondary: #2e4d32;
+    /* Dull Green */
+    --accent: #7b52ab;
+    /* Muted Violet */
+    --text: #e0e0e0;
+    --bg: #121212;
+    --bg-card: #1f1f1f;
+    --error: #e53935;
+    --success: #4caf50;
 
-  color-scheme: dark;
-  color: var(--text);
-  background-color: var(--bg);
+    /* Slot Colors - Muted */
+    --slot-free: #4caf50;
+    /* Muted Green */
+    --slot-occupied: #e53935;
+    /* Muted Red */
+    --slot-booked: #1976d2;
+    /* Muted Blue */
+    --slot-my-booking: #7c4dff;
+    /* Deep Purple */
+
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    line-height: 1.5;
+    font-weight: 400;
+
+    color-scheme: dark;
+    color: var(--text);
+    background-color: var(--bg);
 }
 
 body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
 }
 
-h1, h2, h3 {
+h1,
+h2,
+h3 {
     margin: 0;
     font-weight: 600;
 }
 
 button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: var(--primary);
-  color: white;
-  cursor: pointer;
-  transition: border-color 0.25s, transform 0.1s;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    padding: 0.6em 1.2em;
+    font-size: 1em;
+    font-weight: 500;
+    font-family: inherit;
+    background-color: var(--primary);
+    color: white;
+    cursor: pointer;
+    transition: all 0.25s;
 }
 
 button:hover {
-  border-color: var(--accent);
-  transform: translateY(-1px);
-}
-
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+    background-color: var(--accent);
+    transform: translateY(-1px);
 }
 
 .card {
     background: var(--bg-card);
     padding: 2rem;
     border-radius: 12px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
 
 .input-field {
@@ -72,9 +77,4 @@ button:focus-visible {
     width: 100%;
     box-sizing: border-box;
     margin-bottom: 1rem;
-}
-
-/* Animations */
-.fade-in {
-    opacity: 0;
 }

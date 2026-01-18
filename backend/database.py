@@ -1,15 +1,15 @@
 from typing import List, Dict, Optional
 from .models import User, Slot, SlotStatus
+import uuid
 
 # --- In-Memory Storage (Mock DB) ---
-# For a demo, this is sufficient. We can persist to JSON if needed.
 
 users_db: Dict[str, User] = {}
 slots_db: Dict[str, Slot] = {}
 
 def init_db():
     """Initialize the slots database with the static configuration."""
-    # Mall 1: Level 1 (Pi) - 4 slots
+    # Mall 1: Level 1 (Pi)
     # M1-L1-S1 (Bookable)
     create_slot("M1-L1-S1", "mall1", 1, 1, False, False)
     # M1-L1-S2 (Bookable)
@@ -23,12 +23,11 @@ def init_db():
     for i in range(5, 9):
         create_slot(f"M1-L2-S{i}", "mall1", 2, i, False, False)
 
-    # Mall 2: Level 1 (ESP32) - 4 slots
-    # M2-L1-S1 (Bookable)
+    # Mall 2: Level 1 (ESP32)
+    # create_slot("M2-L1-S1", "mall2", 1, 1, False, False)
     create_slot("M2-L1-S1", "mall2", 1, 1, False, False)
-    # M2-L1-S2 (Bookable)
     create_slot("M2-L1-S2", "mall2", 1, 2, False, False)
-    # M2-L1-S3, S4 (Normal)
+    # S3, S4 Normal
     create_slot("M2-L1-S3", "mall2", 1, 3, False, False)
     create_slot("M2-L1-S4", "mall2", 1, 4, False, False)
 

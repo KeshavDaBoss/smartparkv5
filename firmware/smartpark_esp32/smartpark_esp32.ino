@@ -3,9 +3,9 @@
 #include <ArduinoJson.h> // Make sure to install ArduinoJson library
 
 // --- Configuration ---
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
-const char* serverUrl = "http://YOUR_PI_IP:8000/sensor/esp32"; // Replace with Pi's IP
+const char* ssid = "Anil 2G";
+const char* password = "Anil@1812";
+const char* serverUrl = "http://192.168.1.134:8000/sensor/esp32"; // Replace with Pi's IP
 
 // --- Pinout (Mall 2) ---
 // Slot 1 (Bookable), Slot 2 (Bookable), Slot 3 (Normal), Slot 4 (Normal)
