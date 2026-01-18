@@ -5,7 +5,7 @@
 // --- Configuration ---
 const char* ssid = "Anil 2G";
 const char* password = "Anil@1812";
-const char* serverUrl = "http://192.168.1.134:8000/sensor/esp32"; // Replace with Pi's IP
+const char* serverUrl = "http://192.168.1.134:8000/sensor/esp32"; // Host is Raspberry Pi
 
 // --- Pinout (Mall 2) ---
 // Slot 1 (Bookable), Slot 2 (Bookable), Slot 3 (Normal), Slot 4 (Normal)
@@ -93,12 +93,17 @@ float readDistance(int trig, int echo) {
 }
 
 void sendData(float distances[]) {
+  // Use WiFiClient class to create TCP connection
+  WiFiClient client;
   HTTPClient http;
-  http.begin(serverUrl);
+
+  // Use the new signature: begin(client, url)
+  http.begin(client, serverUrl);
   http.addHeader("Content-Type", "application/json");
 
   // Create JSON Payload
-  StaticJsonDocument<200> doc;
+  // Using DynamicJsonDocument to be safe or Static with enough buffer
+  StaticJsonDocument<512> doc; // Increased size
   JsonArray distArray = doc.createNestedArray("distances");
   for (int i = 0; i < numSensors; i++) {
     distArray.add(distances[i]);
@@ -112,11 +117,25 @@ void sendData(float distances[]) {
   
   if (httpResponseCode > 0) {
     String response = http.getString();
-    // TODO: Parse response for LED control
-    // Example response: {"leds": [true, false]}
-    // For now, just logging
-    Serial.println(httpResponseCode);
-    Serial.println(response);
+    Serial.print("Response: ");
+    Serial.println(response); // Debug
+
+    // Parse Response
+    StaticJsonDocument<200> respDoc;
+    DeserializationError error = deserializeJson(respDoc, response);
+
+    if (!error) {
+      JsonArray leds = respDoc["leds"];
+      if (!leds.isNull()) {
+        for (int i = 0; i < numLeds && i < leds.size(); i++) {
+          bool state = leds[i];
+          digitalWrite(ledPins[i], state ? HIGH : LOW);
+        }
+      }
+    } else {
+      Serial.print("JSON Parse Error: ");
+      Serial.println(error.c_str());
+    }
   } else {
     Serial.print("Error on sending POST: ");
     Serial.println(httpResponseCode);

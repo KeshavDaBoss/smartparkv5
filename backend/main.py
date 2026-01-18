@@ -226,6 +226,7 @@ def receive_esp32_data(data: SensorData):
     print(f"Received ESP32 Data: {data.distances}")
     m2_slots = ["M2-L1-S1", "M2-L1-S2", "M2-L1-S3", "M2-L1-S4"]
     
+    # Process Sensor Data
     for i, dist in enumerate(data.distances):
         if i < len(m2_slots):
             slot_id = m2_slots[i]
@@ -235,5 +236,27 @@ def receive_esp32_data(data: SensorData):
                     slot.status = SlotStatus.OCCUPIED
                 else:
                     slot.status = SlotStatus.FREE
-                    
-    return {"status": "ok"}
+
+    # Calculate LED States for ESP32 (First 2 slots have LEDs)
+    # Logic: LED ON if Booked for TODAY
+    today = date.today()
+    esp_leds = []
+    
+    # Check S1
+    s1 = slots_db.get("M2-L1-S1")
+    s1_booked = False
+    if s1:
+        # Check bookings_db for this slot and today
+        if any(b.slot_id == "M2-L1-S1" and b.booking_date == today for b in bookings_db):
+            s1_booked = True
+    esp_leds.append(s1_booked)
+    
+    # Check S2
+    s2 = slots_db.get("M2-L1-S2")
+    s2_booked = False
+    if s2:
+        if any(b.slot_id == "M2-L1-S2" and b.booking_date == today for b in bookings_db):
+            s2_booked = True
+    esp_leds.append(s2_booked)
+
+    return {"status": "ok", "leds": esp_leds}
