@@ -30,6 +30,13 @@ class User(UserBase):
     # Simplified auth for demo: plain password or simple hash
     password: str 
 
+class Booking(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    slot_id: str
+    user_id: str
+    booking_date: date
+    created_at: datetime = Field(default_factory=datetime.now)
+
 class Slot(BaseModel):
     id: str  # e.g., "M1-L1-S1"
     mall_id: str
@@ -38,9 +45,6 @@ class Slot(BaseModel):
     is_reserved_disabled: bool = False
     is_reserved_elderly: bool = False
     status: str = SlotStatus.FREE
-    # If booked, who booked it?
-    booked_by_user_id: Optional[str] = None
-    booking_date: Optional[date] = None 
     
     # Coordinates for UI (optional, or handled by frontend map)
     # x: int

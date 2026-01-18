@@ -57,11 +57,11 @@ export async function bookSlot(slotId, userId, dateStr) {
     return response.json();
 }
 
-export async function cancelBooking(slotId, userId) {
+export async function cancelBooking(slotId, userId, dateStr) {
     const response = await fetch(`${BASE_URL}/cancel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slot_id: slotId, user_id: userId })
+        body: JSON.stringify({ slot_id: slotId, user_id: userId, date: dateStr })
     });
     if (!response.ok) throw new Error('Cancellation failed');
     return response.json();

@@ -5,8 +5,8 @@ from datetime import date, datetime, timedelta
 import asyncio
 import contextlib
 
-from .models import Slot, User, UserCreate, BookingRequest, SlotStatus, SensorData, UserType
-from .database import slots_db, users_db, init_db, get_user_by_username
+from .models import Slot, User, UserCreate, Booking, BookingRequest, SlotStatus, SensorData, UserType
+from .database import slots_db, users_db, bookings_db, init_db, get_user_by_username
 from .hardware_service import setup_gpio, update_pi_sensors, set_led, PI_PINOUT
 
 # --- Lifecycle ---
@@ -15,31 +15,30 @@ async def lifespan(app: FastAPI):
     # Startup
     init_db()
     setup_gpio()
-    # Background task for Pi Sensors (if running on Pi)
-    # We can run a simplified loop or just rely on requests. 
-    # For a real-time system, a background loop is better.
     asyncio.create_task(sensor_loop())
     yield
     # Shutdown
-    # GPIO.cleanup() # Optional
 
 async def sensor_loop():
     while True:
         update_pi_sensors()
-        # After updating sensors, we need to refresh LED states based on TODAY's bookings
         refresh_leds()
-        await asyncio.sleep(1) # 1Hz update rate
+        await asyncio.sleep(1) 
 
 def refresh_leds():
-    today_str = date.today().strftime("%d%m%Y")
-    for slot_id, slot in slots_db.items():
-        # Check if booked for TODAY
-        is_booked_today = slot.booking_date and slot.booking_date.strftime("%d%m%Y") == today_str
-        
-        # LED Logic: "The booked slot's LED lights up when booked"
-        # Assuming this means IF booked for TODAY -> LED ON.
-        # Regardless of physical occupation? Usually yes, to indicate reservation.
-        if is_booked_today:
+    today = date.today()
+    
+    # 1. Reset all LEDs first (logical state, optimization possible)
+    # Actually, let's just find which slots are booked TODAY
+    booked_slot_ids_today = set()
+    
+    for booking in bookings_db:
+        if booking.booking_date == today:
+            booked_slot_ids_today.add(booking.slot_id)
+            
+    # 2. Update LEDs
+    for slot_id in slots_db.keys():
+        if slot_id in booked_slot_ids_today:
             set_led(slot_id, True)
         else:
             set_led(slot_id, False)
@@ -49,7 +48,7 @@ app = FastAPI(lifespan=lifespan)
 # --- CORS ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # For demo purposes
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -70,7 +69,7 @@ def signup(user: UserCreate):
     
     new_user = User(
         username=user.username,
-        password=user.password, # In real app, hash this!
+        password=user.password, 
         is_disabled=user.is_disabled,
         is_elderly=user.is_elderly
     )
@@ -95,12 +94,6 @@ def login(login_data: dict = Body(...)):
 
 @app.get("/slots")
 def get_slots(date_str: str = Query(..., alias="date"), user_id: Optional[str] = None):
-    """
-    Get slots status for a specific date (DDMMYYYY).
-    user_id is optional: if provided, we identify 'my bookings'.
-    """
-    # Parse requested date
-    # Format DDMMYYYY
     try:
         req_date = datetime.strptime(date_str, "%d%m%Y").date()
     except ValueError:
@@ -109,30 +102,27 @@ def get_slots(date_str: str = Query(..., alias="date"), user_id: Optional[str] =
     today = date.today()
     response_slots = []
     
+    # Pre-fetch bookings for this date to avoid O(N^2) if possible, but N is small
+    bookings_for_date = [b for b in bookings_db if b.booking_date == req_date]
+    
     for s_id, slot in slots_db.items():
-        # Create a copy to modify status for response without touching DB persistence state needlessly
-        # (Though we need to check the DB's booking info)
-        
-        # Default status from physical sensor (only relevant if date is TODAY)
-        # If date is FUTURE, physical status is irrelevant (always FREE unless booked)
-        
         current_status = SlotStatus.FREE
         
+        # 1. Physical Sensor Status (Only if Today)
         if req_date == today:
-             current_status = slot.status # Takes physical sensor into account
+             current_status = slot.status 
         
-        # Overlay Booking Data
-        # Check if THIS slot is booked for req_date
-        is_booked_for_date = False
+        # 2. Booking Status Overrides
+        # Check if slot is booked in our list
+        booking_for_this_slot = next((b for b in bookings_for_date if b.slot_id == s_id), None)
+        
         booked_by_me = False
         
-        if slot.booking_date == req_date:
-            is_booked_for_date = True
+        if booking_for_this_slot:
             current_status = SlotStatus.BOOKED
-            if user_id and slot.booked_by_user_id == user_id:
+            if user_id and booking_for_this_slot.user_id == user_id:
                 booked_by_me = True
 
-        # Frontend needs: id, mall_id, level_id, slot_number, status, is_my_booking, types
         response_slots.append({
             "id": slot.id,
             "mall_id": slot.mall_id,
@@ -147,67 +137,85 @@ def get_slots(date_str: str = Query(..., alias="date"), user_id: Optional[str] =
     return response_slots
 
 @app.post("/book")
-def book_slot(booking: BookingRequest):
-    # Bookings can be made only in 1 day in advance (i.e. for the next day)
-    # OR maybe "today or next day"? Use case says: "Whether the booking is for today or the next day"
-    # But later: "Bookings can be made only in 1 day in advance".
-    # I will support both but let Frontend enforce policy or loose enforcement.
-    # Let's start with strict validation if needed, but user requirement is a bit conflicting.
-    # "Bookings can be made only in 1 day in advance" might mean "Max 1 day in advance" OR "Only for tomorrow".
-    # Given "booking page asking for Whether the booking is for today or the next day", it means BOTH are allowed.
-    
+def book_slot(booking_req: BookingRequest):
     try:
-        req_date = datetime.strptime(booking.booking_date, "%d%m%Y").date()
+        req_date = datetime.strptime(booking_req.booking_date, "%d%m%Y").date()
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format")
 
-    slot = slots_db.get(booking.slot_id)
+    slot = slots_db.get(booking_req.slot_id)
     if not slot:
         raise HTTPException(status_code=404, detail="Slot not found")
         
-    # Check eligibility
-    user = users_db.get(booking.user_id)
+    user = users_db.get(booking_req.user_id)
     if not user:
          raise HTTPException(status_code=404, detail="User not found")
          
+    # Check constraints
     if slot.is_reserved_disabled and not user.is_disabled:
         raise HTTPException(status_code=403, detail="Reserved for Disabled usage")
-        
     if slot.is_reserved_elderly and not user.is_elderly:
         raise HTTPException(status_code=403, detail="Reserved for Elderly usage")
         
-    # Check availability
-    if slot.booking_date == req_date:
+    # Check if slot is already booked for this date
+    existing_booking = next((b for b in bookings_db if b.slot_id == booking_req.slot_id and b.booking_date == req_date), None)
+    if existing_booking:
         raise HTTPException(status_code=409, detail="Slot already booked for this date")
         
-    # Apply Booking
-    slot.booked_by_user_id = user.id
-    slot.booking_date = req_date
+    # Allow multiple bookings by same user on different slots/dates
+    # (Removed restriction "one booking per user" if it existed)
+        
+    # Create Booking
+    new_booking = Booking(
+        slot_id=slot.id,
+        user_id=user.id,
+        booking_date=req_date
+    )
+    bookings_db.append(new_booking)
     
-    # If booked for today, update LED immediately
+    # Update LED immediate check
     if req_date == date.today():
         set_led(slot.id, True)
     
-    return {"message": "Booking successful"}
+    return {"message": "Booking successful", "booking_id": new_booking.id}
 
 @app.post("/cancel")
 def cancel_booking(payload: dict = Body(...)):
     slot_id = payload.get("slot_id")
     user_id = payload.get("user_id")
+    date_str = payload.get("date") # Optional
     
-    slot = slots_db.get(slot_id)
-    if not slot:
-        raise HTTPException(status_code=404, detail="Slot not found")
-        
-    if slot.booked_by_user_id != user_id:
-        raise HTTPException(status_code=403, detail="Not authorized to cancel this booking")
-        
-    # Clear booking
-    slot.booked_by_user_id = None
-    slot.booking_date = None
+    if not slot_id or not user_id:
+        raise HTTPException(status_code=400, detail="Missing slot_id or user_id")
+
+    req_date = None
+    if date_str:
+        try:
+            req_date = datetime.strptime(date_str, "%d%m%Y").date()
+        except ValueError:
+            pass
+
+    # Find booking to cancel
+    # If date provided, exact match.
+    # If no date, maybe cancel the one for TODAY or NEAREST FUTURE?
+    # For now: Cancel matching booking(s).
     
-    # Update LED (Turn off)
-    set_led(slot.id, False)
+    booking_to_cancel = None
+    
+    if req_date:
+        booking_to_cancel = next((b for b in bookings_db if b.slot_id == slot_id and b.user_id == user_id and b.booking_date == req_date), None)
+    else:
+        # Try to find one for today or future
+        # Heuristic: Find first one.
+        booking_to_cancel = next((b for b in bookings_db if b.slot_id == slot_id and b.user_id == user_id), None)
+        
+    if not booking_to_cancel:
+        raise HTTPException(status_code=404, detail="Booking not found to cancel")
+        
+    bookings_db.remove(booking_to_cancel)
+    
+    # Update LED
+    refresh_leds()
     
     return {"message": "Booking cancelled"}
 
@@ -216,11 +224,6 @@ def cancel_booking(payload: dict = Body(...)):
 @app.post("/sensor/esp32")
 def receive_esp32_data(data: SensorData):
     print(f"Received ESP32 Data: {data.distances}")
-    # Expecting 4 distances for Mall 2 (Level 1)
-    # M2-L1-S1, S2, S3, S4
-    
-    # Mapping index to Slot ID
-    # Usually passed in order: S1, S2, S3, S4
     m2_slots = ["M2-L1-S1", "M2-L1-S2", "M2-L1-S3", "M2-L1-S4"]
     
     for i, dist in enumerate(data.distances):
@@ -228,8 +231,6 @@ def receive_esp32_data(data: SensorData):
             slot_id = m2_slots[i]
             slot = slots_db.get(slot_id)
             if slot:
-                # Store physical status in slot
-                # Logic: < 10cm = OCCUPIED
                 if dist < 10.0:
                     slot.status = SlotStatus.OCCUPIED
                 else:

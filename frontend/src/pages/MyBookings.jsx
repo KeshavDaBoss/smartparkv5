@@ -26,9 +26,9 @@ export default function MyBookings() {
 
             // Filter
             const myToday = todaySlots.filter(s => s.is_my_booking);
-            myToday.forEach(s => s._date = 'Today');
+            myToday.forEach(s => { s._date = 'Today'; s._dateStr = todayStr; });
             const myTmrw = tmrwSlots.filter(s => s.is_my_booking);
-            myTmrw.forEach(s => s._date = 'Tomorrow');
+            myTmrw.forEach(s => { s._date = 'Tomorrow'; s._dateStr = tmrwStr; });
 
             setBookings([...myToday, ...myTmrw]);
         } catch (e) {
@@ -45,9 +45,9 @@ export default function MyBookings() {
         return '' + dd + mm + yyyy;
     };
 
-    const handleCancel = async (slotId) => {
+    const handleCancel = async (slotId, dateStr) => {
         if (window.confirm("Cancel this booking?")) {
-            await cancelBooking(slotId, user.user_id);
+            await cancelBooking(slotId, user.user_id, dateStr);
             fetchBookings();
         }
     };
@@ -74,7 +74,7 @@ export default function MyBookings() {
                         </div>
                         <div style={{ display: 'flex', gap: '1rem' }}>
                             <button onClick={() => navigate(`/mall/${b.mall_id}`)}>Navigate to Slot</button>
-                            <button style={{ background: '#ff4d4d' }} onClick={() => handleCancel(b.id)}>Cancel</button>
+                            <button style={{ background: '#ff4d4d' }} onClick={() => handleCancel(b.id, b._dateStr)}>Cancel</button>
                         </div>
                     </div>
                 ))}

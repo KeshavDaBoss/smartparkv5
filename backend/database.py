@@ -1,11 +1,12 @@
 from typing import List, Dict, Optional
-from .models import User, Slot, SlotStatus
+from .models import User, Slot, SlotStatus, Booking
 import uuid
 
 # --- In-Memory Storage (Mock DB) ---
 
 users_db: Dict[str, User] = {}
 slots_db: Dict[str, Slot] = {}
+bookings_db: List['Booking'] = []
 
 def init_db():
     """Initialize the slots database with the static configuration."""
